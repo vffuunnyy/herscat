@@ -1,20 +1,25 @@
 FROM debian:stable-slim
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates curl unzip \
-    && rm -rf /var/lib/apt/lists/*
-
 LABEL org.opencontainers.image.title="herscat" \
-      org.opencontainers.image.description="High-intensity xray proxy stress tester in Rust" \
-      org.opencontainers.image.licenses="MIT OR Apache-2.0" \
-      org.opencontainers.image.source="https://github.com/${REPO_OWNER}/${REPO_NAME}"
+    org.opencontainers.image.description="High-intensity xray proxy stress tester in Rust" \
+    org.opencontainers.image.licenses="MIT OR Apache-2.0" \
+    org.opencontainers.image.source="https://github.com/${REPO_OWNER}/${REPO_NAME}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends golang git binutils ca-certificates curl unzip
+
+# ARG XRAY_VERSION=25.8.3
+# RUN curl -L -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-64.zip \
+#     && unzip /tmp/xray.zip xray -d /usr/local/bin/ \
+#     && chmod +x /usr/local/bin/xray \
+#     && rm /tmp/xray.zip
 
 ARG XRAY_VERSION=25.8.3
-RUN curl -L -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-64.zip \
-    && unzip /tmp/xray.zip xray -d /usr/local/bin/ \
-    && chmod +x /usr/local/bin/xray \
-    && rm /tmp/xray.zip
+
+RUN git clone --depth 1 --branch v${XRAY_VERSION} https://github.com/XTLS/Xray-core.git /src \
+    && cd /src \
+    && GOAMD64=v1 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /usr/local/bin/xray ./main \
+    && strip /usr/local/bin/xray \
+    && apt-get purge -y golang git binutils && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 COPY herscat /usr/local/bin/herscat
 
