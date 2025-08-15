@@ -38,3 +38,6 @@ release:
   draft: false
   prerelease: auto
   mode: append
+
+changelog:
+  disable: true

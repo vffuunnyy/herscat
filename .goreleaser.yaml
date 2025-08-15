@@ -69,6 +69,8 @@ release:
   draft: false
   prerelease: auto
   mode: append
+  extra_files:
+    - glob: CHANGELOG.md
 
 changelog:
   sort: asc
