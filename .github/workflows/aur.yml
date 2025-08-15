@@ -1,0 +1,146 @@
+name: Publish to AUR (herscat-bin)
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  aur:
+    name: Update AUR package
+    runs-on: ubuntu-latest
+    env:
+      PKGNAME: herscat-bin
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare PKGBUILD variables
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.release.tag_name }}"
+          VER="${TAG#v}"
+          OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+
+          AMD64_URL="https://github.com/${OWNER}/${REPO_NAME}/releases/download/${TAG}/${REPO_NAME}_${VER}_linux_amd64.tar.gz"
+          ARM64_URL="https://github.com/${OWNER}/${REPO_NAME}/releases/download/${TAG}/${REPO_NAME}_${VER}_linux_arm64.tar.gz"
+
+          echo "Downloading release tarballs..."
+          curl -fsSL "$AMD64_URL" -o amd64.tar.gz
+          curl -fsSL "$ARM64_URL" -o arm64.tar.gz
+
+          SHA_AMD64=$(sha256sum amd64.tar.gz | awk '{print $1}')
+          SHA_ARM64=$(sha256sum arm64.tar.gz | awk '{print $1}')
+
+          echo "version=${VER}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "owner=${OWNER}" >> $GITHUB_OUTPUT
+          echo "repo=${REPO_NAME}" >> $GITHUB_OUTPUT
+          echo "amd64_url=${AMD64_URL}" >> $GITHUB_OUTPUT
+          echo "arm64_url=${ARM64_URL}" >> $GITHUB_OUTPUT
+          echo "sha_amd64=${SHA_AMD64}" >> $GITHUB_OUTPUT
+          echo "sha_arm64=${SHA_ARM64}" >> $GITHUB_OUTPUT
+
+      - name: Generate PKGBUILD
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > PKGBUILD << 'EOF'
+          pkgname=${PKGNAME}
+          _binname=herscat
+          pkgver=%VERSION%
+          pkgrel=1
+          pkgdesc="High-intensity xray proxy stress tester in Rust"
+          arch=(x86_64 aarch64)
+          url="https://github.com/%OWNER%/%REPO%"
+          license=(MIT Apache)
+          provides=(herscat)
+          conflicts=(herscat)
+          depends=()
+          options=(!strip)
+
+          source_x86_64=("%AMD64_URL%")
+          sha256sums_x86_64=("%SHA_AMD64%")
+          source_aarch64=("%ARM64_URL%")
+          sha256sums_aarch64=("%SHA_ARM64%")
+
+          package() {
+            install -Dm755 /dev/stdin "$pkgdir/usr/bin/${_binname}" <<BIN
+          #!/bin/sh
+          set -e
+          TMPDIR=$(mktemp -d)
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64) TAR=amd64.tar.gz ;;
+            aarch64) TAR=arm64.tar.gz ;;
+            *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;;
+          esac
+          cp "$PWD/$TAR" "$TMPDIR/" && cd "$TMPDIR"
+          tar -xzf "$TAR"
+          # Expect binary named 'herscat' in the archive
+          install -Dm755 herscat "$pkgdir/usr/bin/herscat"
+          # Install docs if present
+          if [ -f README.md ]; then install -Dm644 README.md "$pkgdir/usr/share/doc/${_binname}/README.md"; fi
+          if [ -f LICENSE ] || [ -f LICENSE-MIT ] || [ -f LICENSE-APACHE ]; then
+            for L in LICENSE LICENSE-MIT LICENSE-APACHE; do
+              [ -f "$L" ] && install -Dm644 "$L" "$pkgdir/usr/share/licenses/${_binname}/$L"
+            done
+          fi
+          BIN
+          }
+          EOF
+
+          sed -i \
+            -e "s|%VERSION%|${{ steps.prep.outputs.version }}|g" \
+            -e "s|%OWNER%|${{ steps.prep.outputs.owner }}|g" \
+            -e "s|%REPO%|${{ steps.prep.outputs.repo }}|g" \
+            -e "s|%AMD64_URL%|${{ steps.prep.outputs.amd64_url }}|g" \
+            -e "s|%ARM64_URL%|${{ steps.prep.outputs.arm64_url }}|g" \
+            -e "s|%SHA_AMD64%|${{ steps.prep.outputs.sha_amd64 }}|g" \
+            -e "s|%SHA_ARM64%|${{ steps.prep.outputs.sha_arm64 }}|g" PKGBUILD
+
+      - name: Generate .SRCINFO via Arch container
+        shell: bash
+        run: |
+          docker run --rm -v "$PWD":/pkg -w /pkg archlinux:base-devel bash -lc "pacman -Syu --noconfirm pacman base-devel && makepkg --printsrcinfo > .SRCINFO"
+
+      - name: Setup SSH for AUR
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+
+      - name: Add AUR to known_hosts
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+
+      - name: Clone AUR repository
+        shell: bash
+        run: |
+          rm -rf aur-repo
+          git clone ssh://aur@aur.archlinux.org/${PKGNAME}.git aur-repo
+
+      - name: Update AUR repo contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd aur-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          cp -f ../PKGBUILD ../.SRCINFO .
+          if git status --porcelain | grep -q .; then
+            git add PKGBUILD .SRCINFO
+            git commit -m "${PKGNAME}: update to ${{ steps.prep.outputs.tag }}"
+            git push origin HEAD:master
+          else
+            echo "No changes to push."
+          fi

@@ -1,0 +1,132 @@
+version: 2
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+
+project_name: herscat
+
+before:
+  hooks:
+    # Ensure we have stable toolchain and cargo-zigbuild available for cross-compilation
+    - rustup default stable
+    - cargo install --locked cargo-zigbuild || true
+
+builds:
+  - id: herscat
+    builder: rust
+    binary: herscat
+    # Default command is zigbuild; keep it to leverage cargo-zigbuild cross compilation
+    # command: zigbuild
+    # Build popular targets; adjust as needed
+    targets:
+      - x86_64-unknown-linux-gnu
+      - aarch64-unknown-linux-gnu
+      - x86_64-apple-darwin
+      - aarch64-apple-darwin
+      - x86_64-pc-windows-gnu
+    # Additional flags (none needed for simple crates)
+    flags:
+      - --release
+    env:
+      - RUSTFLAGS=-C target-cpu=native
+    hooks:
+      # Example hooks (disabled by default). You can add scripts here.
+      # pre: ./scripts/pre_build.sh
+      # post: ./scripts/post_build.sh {{ .Path }}
+      
+archives:
+  - id: default
+    builds:
+      - herscat
+    format: tar.gz
+    # Windows will automatically get .tar.gz unless overridden; add zip replacement:
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Target }}"
+    files:
+      - LICENSE*
+      - README*
+
+checksum:
+  name_template: "checksums_{{ .ProjectName }}_{{ .Version }}.txt"
+
+# Sign checksum file with your default GPG key (optional). Requires GPG configured in CI.
+signs:
+  - artifacts: checksum
+    cmd: gpg2
+    args:
+      - "--batch"
+      - "-u"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+# Optional: sign binaries themselves (disabled by default)
+# binary_signs:
+#   - {}
+
+# Release configuration (GitHub Release)
+release:
+  # Use the current repository by default
+  draft: false
+  prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+# Linux packages via nFPM (deb, rpm, apk)
+nfpms:
+  - id: default
+    package_name: herscat
+    description: "High-intensity xray proxy stress tester in Rust"
+    homepage: "https://github.com/{{ .RepoOwner }}/{{ .RepoName }}"
+    maintainer: "vffuunnyy <vffuunnyy@gmail.com>"
+    license: "MIT OR Apache-2.0"
+    vendor: "herscat"
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    file_name_template: "{{ .ConventionalFileName }}"
+    # Package signing (requires env GPG_KEY_PATH to point to ASCII-armored private key file)
+    deb:
+      signature:
+        key_file: "{{ .Env.GPG_KEY_PATH }}"
+    rpm:
+      signature:
+        key_file: "{{ .Env.GPG_KEY_PATH }}"
+
+# Docker images built from produced linux binaries
+dockers:
+  - id: herscat
+    use: buildx
+    # Build for multiple linux architectures
+    goos: linux
+    ids:
+      - herscat
+    image_templates:
+      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}"
+      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:latest"
+    dockerfile: Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+    extra_files:
+      - LICENSE
+      - README.md
+
+# Create and publish multi-arch manifest pointing to per-arch images
+docker_manifests:
+  - name_template: "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-linux-amd64"
+      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-linux-arm64"
+  - name_template: "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:latest"
+    image_templates:
+      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-linux-amd64"
+      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-linux-arm64"

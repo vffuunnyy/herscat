@@ -1,0 +1,111 @@
+name: goreleaser
+
+on:
+  pull_request:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+  packages: write
+  # issues: write
+  # id-token: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: latest
+
+      - name: Set up QEMU (for multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cargo-zigbuild
+        run: |
+          cargo install --locked cargo-zigbuild || true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Import GPG key (for signing checksums and packages)
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.PASSPHRASE }}
+
+      - name: Write signing keys to files
+        shell: bash
+        run: |
+          # Cosign private key
+          if [[ -n "${COSIGN_KEY}" ]]; then
+            echo "$COSIGN_KEY" > cosign.key
+            chmod 600 cosign.key
+          fi
+          # ASCII-armored private key file for nFPM package signing (deb/rpm)
+          if [[ -n "${GPG_PRIVATE_KEY}" ]]; then
+            echo "$GPG_PRIVATE_KEY" > gpg-packages.key
+            chmod 600 gpg-packages.key
+          fi
+        env:
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
+          COSIGN_KEY_PATH: $GITHUB_WORKSPACE/cosign.key
+          GPG_KEY_PATH: $GITHUB_WORKSPACE/gpg-packages.key
+
+      - name: Cosign sign GHCR images (tag and latest)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
+          COSIGN_KEY_PATH: $GITHUB_WORKSPACE/cosign.key
+        run: |
+          set -euo pipefail
+          OWNER="${{ github.repository_owner }}"
+          REPO="${{ github.event.repository.name }}"
+          TAG="${{ github.ref_name }}"
+          for REF in "ghcr.io/${OWNER}/${REPO}:${TAG}" "ghcr.io/${OWNER}/${REPO}:latest"; do
+            echo "Signing $REF"
+            cosign sign --yes --key "$COSIGN_KEY_PATH" "$REF"
+          done
+
+      - name: Publish crate to crates.io
+        if: startsWith(github.ref, 'refs/tags/')
+        run: cargo publish --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

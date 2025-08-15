@@ -1,0 +1,18 @@
+FROM debian:stable-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+LABEL org.opencontainers.image.title="herscat" \
+      org.opencontainers.image.description="High-intensity xray proxy stress tester in Rust" \
+      org.opencontainers.image.licenses="MIT OR Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/${REPO_OWNER}/${REPO_NAME}"
+
+COPY herscat /usr/local/bin/herscat
+
+RUN useradd -u 10001 -r -s /sbin/nologin appuser \
+    && chown appuser:appuser /usr/local/bin/herscat
+USER appuser
+
+ENTRYPOINT ["/usr/local/bin/herscat"]
