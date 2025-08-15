@@ -87,7 +87,10 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --id-filter herscat-linux-amd64,herscat-linux-arm64
+          args: >-
+            release --clean
+            --id herscat-linux-amd64
+            --id herscat-linux-arm64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -102,7 +105,9 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --single-target --id-filter herscat-macos
+          args: >-
+            release --clean --single-target
+            --id herscat-macos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -114,7 +119,9 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --single-target --id-filter herscat-windows
+          args: >-
+            release --clean --single-target
+            --id herscat-windows
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
