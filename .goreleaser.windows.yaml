@@ -11,7 +11,8 @@ builds:
   - id: herscat-windows
     builder: rust
     binary: herscat
-    command: cargo
+    tool: cargo
+    command: build
     targets:
       - x86_64-pc-windows-msvc
     flags: [--release]

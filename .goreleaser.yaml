@@ -12,7 +12,8 @@ builds:
   - id: herscat-linux-amd64
     builder: rust
     binary: herscat
-    command: cargo
+    tool: cargo
+    command: build
     targets:
       - x86_64-unknown-linux-gnu
     flags: [--release]
@@ -20,11 +21,11 @@ builds:
   - id: herscat-linux-arm64
     builder: rust
     binary: herscat
-    command: cross
+    tool: cross
+    command: build
     targets:
       - aarch64-unknown-linux-gnu
     flags: [--release]
-    env: [RUSTFLAGS=-C target-cpu=native]
     env: [RUSTFLAGS=-C target-cpu=native]
       
 archives:
