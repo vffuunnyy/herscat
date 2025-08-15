@@ -77,7 +77,7 @@ docker run --rm -it \
   --network host \
   -v /usr/local/bin/xray:/usr/local/bin/xray:ro \
   ghcr.io/vffuunnyy/herscat:latest \
-  herscat --url "vless://uuid@server.com:443?type=tcp&security=tls&sni=server.com"
+  --url "vless://uuid@server.com:443?type=tcp&security=tls&sni=server.com"
 
 # Run with a list file mounted into the container
 docker run --rm -it \
@@ -85,7 +85,7 @@ docker run --rm -it \
   -v /usr/local/bin/xray:/usr/local/bin/xray:ro \
   -v $(pwd)/proxies.txt:/data/proxies.txt:ro \
   ghcr.io/vffuunnyy/herscat:latest \
-  herscat --list /data/proxies.txt --concurrency 2000 --instances 10 --duration 300
+  --list /data/proxies.txt --concurrency 2000 --instances 10 --duration 300
 ```
 
 Notes:

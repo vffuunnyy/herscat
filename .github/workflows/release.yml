@@ -140,15 +140,18 @@ jobs:
         shell: bash
         env:
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
-          COSIGN_KEY_PATH: $RUNNER_TEMP/cosign.key
+          COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
         run: |
           set -euo pipefail
+          echo "$COSIGN_KEY" > "$RUNNER_TEMP/cosign.key"
+          chmod 600 "$RUNNER_TEMP/cosign.key"
+          KEY_PATH="$RUNNER_TEMP/cosign.key"
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.event.repository.name }}"
           TAG="${{ github.ref_name }}"
           for REF in "ghcr.io/${OWNER}/${REPO}:${TAG}" "ghcr.io/${OWNER}/${REPO}:latest"; do
             echo "Signing $REF"
-            cosign sign --yes --key "$COSIGN_KEY_PATH" "$REF"
+            cosign sign --yes --key "$KEY_PATH" "$REF"
           done
 
       - name: Publish crate to crates.io
