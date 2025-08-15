@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 
 The format follows Keep a Changelog and the project adheres to Semantic Versioning.
 
+## [0.1.1] - 2025-08-15
+
+### Changed
+- Docker image now bundles `xray-core`; external mount no longer required.
+- Updated Docker usage examples in README.
+
+### Fixed
+- README typos and outdated notes.
+
 ## [0.1.0] - 2025-08-15
 
 ### Added

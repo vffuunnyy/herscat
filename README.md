@@ -82,21 +82,19 @@ docker pull ghcr.io/vffuunnyy/herscat:latest
 # Run with a single proxy URL
 docker run --rm -it \
   --network host \
-  -v /usr/local/bin/xray:/usr/local/bin/xray:ro \
   ghcr.io/vffuunnyy/herscat:latest \
   --url "vless://uuid@server.com:443?type=tcp&security=tls&sni=server.com"
 
 # Run with a list file mounted into the container
 docker run --rm -it \
   --network host \
-  -v /usr/local/bin/xray:/usr/local/bin/xray:ro \
   -v $(pwd)/proxies.txt:/data/proxies.txt:ro \
   ghcr.io/vffuunnyy/herscat:latest \
   --list /data/proxies.txt --concurrency 2000 --instances 10 --duration 300
 ```
 
 Notes:
-- HersCat launches local xray-core instances; ensure the xray binary exists on the host at `/usr/local/bin/xray` and is mounted read-only into the container as shown above.
+- Since v0.1.1 the Docker image bundles `xray-core`; no extra mount is required.
 - `--network host` is recommended so the containerized tool can open SOCKS5 ports and generate load using host networking.
 
 ## Quick Start
