@@ -49,9 +49,12 @@ sudo chmod +x /usr/local/bin/xray
 You can use any of the following:
 
 - Prebuilt binaries: Download from GitHub Releases (archives include checksums; optional signatures if enabled by CI).
-- Cargo: `cargo install herscat`
+- Cargo:
+```bash
+  cargo install herscat
+```
 - From source:
-  ```bash
+```bash
   git clone https://github.com/vffuunnyy/herscat.git
   cd herscat
   cargo build --release
@@ -59,7 +62,7 @@ You can use any of the following:
   cargo install --path .
   ```
 - Docker: A minimal image built via GoReleaser can be used to run the tool in a container environment.
-- Arch Linux (AUR):
+- Arch Linux (AUR) [PLANNED]:
   ```bash
   pacman -S herscat-bin
   yay -S herscat-bin
