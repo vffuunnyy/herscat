@@ -60,6 +60,7 @@ jobs:
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           PASSPHRASE: ${{ secrets.PASSPHRASE }}
+          NFPM_DEFAULT_PASSPHRASE: ${{ secrets.PASSPHRASE }}
         with:
           gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}
           passphrase: ${{ env.PASSPHRASE }}
@@ -93,6 +94,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           PASSPHRASE: ${{ secrets.PASSPHRASE }}
+          NFPM_DEFAULT_PASSPHRASE: ${{ secrets.PASSPHRASE }}
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
           COSIGN_KEY_PATH: $RUNNER_TEMP/cosign.key
           GPG_KEY_PATH: $RUNNER_TEMP/gpg-packages.key
@@ -109,6 +111,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           PASSPHRASE: ${{ secrets.PASSPHRASE }}
+          NFPM_DEFAULT_PASSPHRASE: ${{ secrets.PASSPHRASE }}
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
           COSIGN_KEY_PATH: $RUNNER_TEMP/cosign.key
           GPG_KEY_PATH: $RUNNER_TEMP/gpg-packages.key
@@ -125,6 +128,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           PASSPHRASE: ${{ secrets.PASSPHRASE }}
+          NFPM_DEFAULT_PASSPHRASE: ${{ secrets.PASSPHRASE }}
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
           COSIGN_KEY_PATH: $RUNNER_TEMP/cosign.key
           GPG_KEY_PATH: $RUNNER_TEMP/gpg-packages.key

@@ -97,11 +97,9 @@ nfpms:
     deb:
       signature:
         key_file: "{{ .Env.GPG_KEY_PATH }}"
-        passphrase: "{{ .Env.PASSPHRASE }}"
     rpm:
       signature:
         key_file: "{{ .Env.GPG_KEY_PATH }}"
-        passphrase: "{{ .Env.PASSPHRASE }}"
 
 # Docker images built from produced linux binaries
 dockers:
