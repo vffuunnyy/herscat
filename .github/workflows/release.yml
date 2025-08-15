@@ -14,7 +14,11 @@ permissions:
 
 jobs:
   goreleaser:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,29 +28,29 @@ jobs:
       - name: Set up Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Set up Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          zig-version: 0.13.0
-
       - name: Set up QEMU (for multi-arch emulation)
+        if: matrix.os == 'ubuntu-latest'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: matrix.os == 'ubuntu-latest'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
+        if: matrix.os == 'ubuntu-latest'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install cargo-zigbuild
+      - name: Install cross (Linux only)
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          cargo install --locked cargo-zigbuild || true
+          cargo install --locked cross || true
 
       - name: Install cosign
+        if: matrix.os == 'ubuntu-latest'
         uses: sigstore/cosign-installer@v3
 
       - name: Import GPG key (for signing checksums and packages)
@@ -78,11 +82,12 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
 
       - name: Run GoReleaser
+        if: matrix.os == 'ubuntu-latest'
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --id-filter herscat-linux-amd64,herscat-linux-arm64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -91,8 +96,32 @@ jobs:
           COSIGN_KEY_PATH: $GITHUB_WORKSPACE/cosign.key
           GPG_KEY_PATH: $GITHUB_WORKSPACE/gpg-packages.key
 
+      - name: Run GoReleaser (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --single-target --id-filter herscat-macos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+
+      - name: Run GoReleaser (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --single-target --id-filter herscat-windows
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+
       - name: Cosign sign GHCR images (tag and latest)
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-latest'
         shell: bash
         env:
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
@@ -108,7 +137,7 @@ jobs:
           done
 
       - name: Publish crate to crates.io
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-latest'
         run: cargo publish --no-verify
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

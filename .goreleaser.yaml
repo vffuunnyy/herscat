@@ -5,37 +5,47 @@ project_name: herscat
 
 before:
   hooks:
-    # Ensure we have stable toolchain and cargo-zigbuild available for cross-compilation
+    # Ensure we have stable toolchain
     - rustup default stable
-    - cargo install --locked cargo-zigbuild || true
 
 builds:
-  - id: herscat
+  - id: herscat-linux-amd64
     builder: rust
     binary: herscat
-    # Default command is zigbuild; keep it to leverage cargo-zigbuild cross compilation
-    # command: zigbuild
-    # Build popular targets; adjust as needed
     targets:
       - x86_64-unknown-linux-gnu
+    flags: [--release]
+    env: [RUSTFLAGS=-C target-cpu=native]
+  - id: herscat-linux-arm64
+    builder: rust
+    binary: herscat
+    targets:
       - aarch64-unknown-linux-gnu
+    flags: [--release]
+    env: [RUSTFLAGS=-C target-cpu=native]
+  - id: herscat-macos
+    builder: rust
+    binary: herscat
+    targets:
       - x86_64-apple-darwin
       - aarch64-apple-darwin
-      - x86_64-pc-windows-gnu
-    # Additional flags (none needed for simple crates)
-    flags:
-      - --release
-    env:
-      - RUSTFLAGS=-C target-cpu=native
-    hooks:
-      # Example hooks (disabled by default). You can add scripts here.
-      # pre: ./scripts/pre_build.sh
-      # post: ./scripts/post_build.sh {{ .Path }}
+    flags: [--release]
+    env: [RUSTFLAGS=-C target-cpu=native]
+  - id: herscat-windows
+    builder: rust
+    binary: herscat
+    targets:
+      - x86_64-pc-windows-msvc
+    flags: [--release]
+    env: [RUSTFLAGS=-C target-cpu=native]
       
 archives:
   - id: default
     builds:
-      - herscat
+      - herscat-linux-amd64
+      - herscat-linux-arm64
+      - herscat-macos
+      - herscat-windows
     format: tar.gz
     # Windows will automatically get .tar.gz unless overridden; add zip replacement:
     format_overrides:
@@ -108,7 +118,8 @@ dockers:
     # Build for multiple linux architectures
     goos: linux
     ids:
-      - herscat
+      - herscat-linux-amd64
+      - herscat-linux-arm64
     image_templates:
       - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
       - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}"
