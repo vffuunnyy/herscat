@@ -50,12 +50,15 @@ jobs:
         uses: sigstore/cosign-installer@v3
 
       - name: Import GPG key (for signing checksums and packages)
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+        if: ${{ env.GPG_PRIVATE_KEY != '' }}
         id: import_gpg
         uses: crazy-max/ghaction-import-gpg@v6
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          PASSPHRASE: ${{ secrets.PASSPHRASE }}
         with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.PASSPHRASE }}
+          gpg_private_key: ${{ env.GPG_PRIVATE_KEY }}
+          passphrase: ${{ env.PASSPHRASE }}
 
       - name: Write signing keys to files
         shell: bash
