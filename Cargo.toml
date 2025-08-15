@@ -1,4 +1,14 @@
 [package]
+exclude = [
+    "dist/*",
+    ".github/*",
+    "Dockerfile*",
+    ".goreleaser*",
+    "Cross.toml",
+    "tests/*",
+    "scripts/*",
+]
+
 name = "herscat"
 version = "0.1.0"
 edition = "2024"
