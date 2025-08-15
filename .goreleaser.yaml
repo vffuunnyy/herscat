@@ -94,9 +94,7 @@ nfpms:
     bindir: /usr/bin
     file_name_template: "{{ .ConventionalFileName }}"
     # Package signing (requires env GPG_KEY_PATH to point to ASCII-armored private key file)
-    deb:
-      signature:
-        key_file: "{{ .Env.GPG_KEY_PATH }}"
+    deb: {}
     rpm: {}
 
 # Docker images built from produced linux binaries
