@@ -94,25 +94,42 @@ nfpms:
     bindir: /usr/bin
     file_name_template: "{{ .ConventionalFileName }}"
     # Package signing (requires env GPG_KEY_PATH to point to ASCII-armored private key file)
-    deb: {}
-    rpm: {}
+    deb:
+      signature:
+        key_file: "{{ .Env.GPG_KEY_PATH }}"
+        passphrase: "{{ .Env.PASSPHRASE }}"
+    rpm:
+      signature:
+        key_file: "{{ .Env.GPG_KEY_PATH }}"
+        passphrase: "{{ .Env.PASSPHRASE }}"
 
 # Docker images built from produced linux binaries
 dockers:
-  - id: herscat
+  - id: herscat-amd64
     use: buildx
-    # Build for multiple linux architectures
     goos: linux
+    goarch: amd64
     ids:
       - herscat-linux-amd64
-      - herscat-linux-arm64
     image_templates:
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}"
-      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-linux-amd64"
     dockerfile: Dockerfile.goreleaser
     build_flag_templates:
-      - "--platform=linux/{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
+      - "--platform=linux/amd64"
+    extra_files:
+      - LICENSE
+      - README.md
+  - id: herscat-arm64
+    use: buildx
+    goos: linux
+    goarch: arm64
+    ids:
+      - herscat-linux-arm64
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-linux-arm64"
+    dockerfile: Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/arm64"
     extra_files:
       - LICENSE
       - README.md

@@ -92,6 +92,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          PASSPHRASE: ${{ secrets.PASSPHRASE }}
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
           COSIGN_KEY_PATH: $RUNNER_TEMP/cosign.key
           GPG_KEY_PATH: $RUNNER_TEMP/gpg-packages.key
@@ -107,6 +108,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          PASSPHRASE: ${{ secrets.PASSPHRASE }}
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
           COSIGN_KEY_PATH: $RUNNER_TEMP/cosign.key
           GPG_KEY_PATH: $RUNNER_TEMP/gpg-packages.key
@@ -122,6 +124,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          PASSPHRASE: ${{ secrets.PASSPHRASE }}
           COSIGN_PWD: ${{ secrets.COSIGN_PWD }}
           COSIGN_KEY_PATH: $RUNNER_TEMP/cosign.key
           GPG_KEY_PATH: $RUNNER_TEMP/gpg-packages.key
