@@ -90,7 +90,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -107,7 +107,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean -f .goreleaser.macos.yaml
+          args: release --clean --release-notes CHANGELOG.md -f .goreleaser.macos.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -124,7 +124,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean -f .goreleaser.windows.yaml
+          args: release --clean --release-notes CHANGELOG.md -f .goreleaser.windows.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
