@@ -143,6 +143,7 @@ jobs:
           COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
         run: |
           set -euo pipefail
+          export COSIGN_PASSWORD="${COSIGN_PWD}"
           echo "$COSIGN_KEY" > "$RUNNER_TEMP/cosign.key"
           chmod 600 "$RUNNER_TEMP/cosign.key"
           KEY_PATH="$RUNNER_TEMP/cosign.key"
