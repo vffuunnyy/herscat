@@ -24,12 +24,18 @@ builds:
       - aarch64-unknown-linux-gnu
     flags: [--release]
     env: [RUSTFLAGS=-C target-cpu=native]
-  - id: herscat-macos
+  - id: herscat-macos-arm64
+    builder: rust
+    binary: herscat
+    targets:
+      - aarch64-apple-darwin
+    flags: [--release]
+    env: [RUSTFLAGS=-C target-cpu=native]
+  - id: herscat-macos-amd64
     builder: rust
     binary: herscat
     targets:
       - x86_64-apple-darwin
-      - aarch64-apple-darwin
     flags: [--release]
     env: [RUSTFLAGS=-C target-cpu=native]
   - id: herscat-windows
@@ -45,7 +51,8 @@ archives:
     builds:
       - herscat-linux-amd64
       - herscat-linux-arm64
-      - herscat-macos
+      - herscat-macos-arm64
+      - herscat-macos-amd64
       - herscat-windows
     format: tar.gz
     # Windows will automatically get .tar.gz unless overridden; add zip replacement:
