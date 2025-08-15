@@ -84,7 +84,7 @@ nfpms:
   - id: default
     package_name: herscat
     description: "High-intensity xray proxy stress tester in Rust"
-    homepage: "https://github.com/{{ .RepoOwner }}/{{ .RepoName }}"
+    homepage: "{{ .GitURL }}"
     maintainer: "vffuunnyy <vffuunnyy@gmail.com>"
     license: "MIT OR Apache-2.0"
     vendor: "herscat"
@@ -111,9 +111,9 @@ dockers:
       - herscat-linux-amd64
       - herscat-linux-arm64
     image_templates:
-      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
-      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}"
-      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:latest"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest"
     dockerfile: Dockerfile.goreleaser
     build_flag_templates:
       - "--platform=linux/{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}"
@@ -125,9 +125,9 @@ dockers:
 docker_manifests:
   - name_template: "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}"
     image_templates:
-      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-linux-amd64"
-      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-linux-arm64"
-  - name_template: "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:latest"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-linux-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-linux-arm64"
+  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest"
     image_templates:
-      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-linux-amd64"
-      - "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}-linux-arm64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-linux-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-linux-arm64"
