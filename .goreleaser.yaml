@@ -97,9 +97,7 @@ nfpms:
     deb:
       signature:
         key_file: "{{ .Env.GPG_KEY_PATH }}"
-    rpm:
-      signature:
-        key_file: "{{ .Env.GPG_KEY_PATH }}"
+    rpm: {}
 
 # Docker images built from produced linux binaries
 dockers:
@@ -123,7 +121,7 @@ dockers:
 
 # Create and publish multi-arch manifest pointing to per-arch images
 docker_manifests:
-  - name_template: "ghcr.io/{{ .RepoOwner }}/{{ .ProjectName }}:{{ .Tag }}"
+  - name_template: "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}"
     image_templates:
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-linux-amd64"
       - "ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}-linux-arm64"
