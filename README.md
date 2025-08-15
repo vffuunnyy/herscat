@@ -7,6 +7,10 @@
 
 High-intensity xray proxy stress tester in Rust.
 
+<p align="center">
+  <img src="assets/logo.png" alt="HersCat Logo"/>
+</p>
+
 **⚠️ For controlled load testing of proxy deployments you own or have explicit permission to test.**
 
 ## Features

@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use futures::future::join_all;
+use rand::Rng;
 use reqwest::{Client, Proxy};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -231,7 +232,9 @@ impl StressRunner {
         let thread_id = params.thread_id;
 
         loop {
-            if let Some(end) = params.end_time && Instant::now() >= end {
+            if let Some(end) = params.end_time
+                && Instant::now() >= end
+            {
                 log::debug!("Worker {thread_id} stopping due to duration limit");
                 break;
             }
@@ -278,8 +281,13 @@ impl StressRunner {
         failed_requests: Arc<AtomicU64>,
         bytes_downloaded: Arc<AtomicU64>,
     ) {
-        let target_index = rand::random::<usize>() % targets.len();
-        let ua_index = rand::random::<usize>() % USER_AGENTS.len();
+        let (target_index, ua_index) = {
+            let mut rng = rand::rng();
+            (
+                rng.random_range(0..targets.len()),
+                rng.random_range(0..USER_AGENTS.len()),
+            )
+        };
 
         let target = &targets[target_index];
         let user_agent = USER_AGENTS[ua_index];
@@ -396,7 +404,9 @@ impl StressRunner {
                 last_failed = current_failed;
                 last_bytes = current_bytes;
 
-                if let Some(end) = end_time && Instant::now() >= end {
+                if let Some(end) = end_time
+                    && Instant::now() >= end
+                {
                     break;
                 }
             }
