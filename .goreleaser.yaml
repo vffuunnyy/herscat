@@ -12,6 +12,7 @@ builds:
   - id: herscat-linux-amd64
     builder: rust
     binary: herscat
+    command: cargo
     targets:
       - x86_64-unknown-linux-gnu
     flags: [--release]

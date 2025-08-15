@@ -11,6 +11,7 @@ builds:
   - id: herscat-macos-arm64
     builder: rust
     binary: herscat
+    command: cargo
     targets:
       - aarch64-apple-darwin
     flags: [--release]
