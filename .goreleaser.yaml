@@ -70,6 +70,7 @@ release:
   draft: false
   prerelease: auto
   mode: append
+  notes_file: CHANGELOG.md
   extra_files:
     - glob: CHANGELOG.md
 
