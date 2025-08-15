@@ -40,7 +40,8 @@ archives:
         format: zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Target }}"
     files:
-      - LICENSE*
+      - LICENSE-APACHE
+      - LICENSE-MIT*
       - README*
 
 checksum:
@@ -115,7 +116,8 @@ dockers:
     build_flag_templates:
       - "--platform=linux/amd64"
     extra_files:
-      - LICENSE
+      - LICENSE-APACHE
+      - LICENSE-MIT
       - README.md
   - id: herscat-arm64
     use: buildx
@@ -129,7 +131,8 @@ dockers:
     build_flag_templates:
       - "--platform=linux/arm64"
     extra_files:
-      - LICENSE
+      - LICENSE-APACHE
+      - LICENSE-MIT
       - README.md
 
 # Create and publish multi-arch manifest pointing to per-arch images
