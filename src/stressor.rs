@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use futures::StreamExt;
 use futures::future::join_all;
-use rand::Rng;
+use rand::{Rng, rng};
 use reqwest::{Client, Proxy};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -9,41 +9,51 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 const DEFAULT_TARGETS: &[&str] = &[
-    "http://speedtest.tele2.net/10GB.zip",
-    "http://ipv4.download.thinkbroadband.com/10GB.zip",
     "http://speedtest.tele2.net/1GB.zip",
-    "http://speedtest.tele2.net/5GB.zip",
     "http://speedtest.tele2.net/100MB.zip",
+    "http://speedtest.tele2.net/10GB.zip",
+
+    "http://ipv4.download.thinkbroadband.com/10GB.zip",
     "http://ipv4.download.thinkbroadband.com/1GB.zip",
     "http://ipv4.download.thinkbroadband.com/5GB.zip",
     "http://ipv4.download.thinkbroadband.com/100MB.zip",
     "http://ipv4.download.thinkbroadband.com/50MB.zip",
     "http://ipv6.download.thinkbroadband.com/10GB.zip",
+
     "http://speedtest.bouyguestelecom.fr/1000Mo.zip",
+
     "http://proof.ovh.net/files/10Gb.dat",
     "http://proof.ovh.net/files/1Gb.dat",
     "http://proof.ovh.net/files/100Mb.dat",
+
     "http://speed.hetzner.de/10GB.bin",
     "http://speed.hetzner.de/1GB.bin",
     "http://speed.hetzner.de/100MB.bin",
+
     "http://mirror.leaseweb.com/speedtest/10000mb.bin",
     "http://mirror.leaseweb.com/speedtest/1000mb.bin",
     "http://mirror.leaseweb.com/speedtest/100mb.bin",
+
     "http://speedtest-sgp1.digitalocean.com/10gb.test",
     "http://speedtest-nyc1.digitalocean.com/10gb.test",
     "http://speedtest-fra1.digitalocean.com/10gb.test",
+
     "http://speedtest.newark.linode.com/100MB-newark.bin",
     "http://speedtest.atlanta.linode.com/100MB-atlanta.bin",
     "http://speedtest.london.linode.com/100MB-london.bin",
+
     "http://fra-de-ping.vultr.com/vultr.com.1000MB.bin",
     "http://lon-gb-ping.vultr.com/vultr.com.1000MB.bin",
     "http://par-fr-ping.vultr.com/vultr.com.1000MB.bin",
+
     "http://speedtest.scaleway.com/10G.iso",
     "http://speedtest.scaleway.com/1G.iso",
+
     "http://mirror.internode.on.net/pub/test/10meg.test",
     "http://mirror.internode.on.net/pub/test/100meg.test",
-    "http://speed.cloudflare.com/10mb",
-    "http://speed.cloudflare.com/100mb",
+    
+    "https://speed.cloudflare.com/__down?bytes=1000000",
+    "https://speed.cloudflare.com/__down?bytes=10000000",
 ];
 
 const USER_AGENTS: &[&str] = &[
@@ -53,22 +63,6 @@ const USER_AGENTS: &[&str] = &[
     "curl/7.88.1",
     "Wget/1.21",
 ];
-
-#[inline]
-fn jitter_range(min_ms: u64, max_ms: u64) -> Duration {
-    let span = max_ms.saturating_sub(min_ms);
-    let rnd = if span > 0 {
-        (rand::random::<u8>() as u64) % span
-    } else {
-        0
-    };
-    Duration::from_millis(min_ms + rnd)
-}
-
-#[inline]
-fn default_jitter() -> Duration {
-    jitter_range(5, 15)
-}
 
 #[derive(Debug, Clone)]
 pub struct StressConfig {
@@ -114,14 +108,14 @@ impl StressStats {
 struct WorkerParams {
     thread_id: usize,
     client: Client,
-    targets: Vec<String>,
-    concurrency: usize,
+    requests: std::sync::Arc<Vec<reqwest::Request>>,
     end_time: Option<Instant>,
     successful_requests: Arc<AtomicU64>,
     failed_requests: Arc<AtomicU64>,
     bytes_downloaded: Arc<AtomicU64>,
 }
 
+#[derive(Clone)]
 pub struct StressRunner {
     config: StressConfig,
     clients: Vec<Client>,
@@ -149,8 +143,6 @@ impl StressRunner {
                 .timeout(Duration::from_secs(600))
                 .danger_accept_invalid_certs(true)
                 .tcp_keepalive(Duration::from_secs(60))
-                .pool_idle_timeout(Duration::from_secs(30))
-                .pool_max_idle_per_host(10)
                 .build()
                 .context("Failed to create HTTP client")?;
 
@@ -173,42 +165,58 @@ impl StressRunner {
 
     pub async fn run(&self) -> Result<()> {
         log::info!(
-            "Starting stress test with total concurrency = {} across {} xray clients",
-            self.config.concurrency,
+            "Starting stress test with {} xray clients",
             self.clients.len()
         );
 
         let mut handles = Vec::new();
         let end_time = self.config.duration.map(|d| self.stats.start_time + d);
 
-        // Distribute total concurrency across clients as evenly as possible
-        let n = self.clients.len().max(1);
-        let base = self.config.concurrency / n;
-        let rem = self.config.concurrency % n;
-
         for (idx, client) in self.clients.iter().cloned().enumerate() {
-            let client_concurrency = if idx < rem { base + 1 } else { base };
-            if client_concurrency == 0 {
-                continue;
+            for _ in 0..self.config.concurrency {
+                let successful_requests = Arc::clone(&self.successful_requests);
+                let failed_requests = Arc::clone(&self.failed_requests);
+                let bytes_downloaded = Arc::clone(&self.bytes_downloaded);
+
+                let requests = Arc::new({
+                    let mut vec = Vec::new();
+                    for t in &self.config.targets {
+                        let req = client
+                            .get(t)
+                            .header(
+                                "User-Agent",
+                                USER_AGENTS[rng().random_range(0..USER_AGENTS.len())],
+                            )
+                            .build()
+                            .unwrap();
+                        vec.push(req);
+                    }
+                    vec
+                });
+
+                let params = WorkerParams {
+                    thread_id: idx,
+                    client: client.clone(),
+                    requests: requests.clone(),
+                    end_time,
+                    successful_requests: successful_requests.clone(),
+                    failed_requests: failed_requests.clone(),
+                    bytes_downloaded: bytes_downloaded.clone(),
+                };
+
+                let handle = tokio::spawn(async move { Self::worker_loop(params).await });
+                handles.push(handle);
             }
-            let targets = self.config.targets.clone();
-            let successful_requests = Arc::clone(&self.successful_requests);
-            let failed_requests = Arc::clone(&self.failed_requests);
-            let bytes_downloaded = Arc::clone(&self.bytes_downloaded);
+        }
 
-            let params = WorkerParams {
-                thread_id: idx,
-                client,
-                targets,
-                concurrency: client_concurrency,
-                end_time,
-                successful_requests,
-                failed_requests,
-                bytes_downloaded,
-            };
-
-            let handle = tokio::spawn(async move { Self::worker_loop(params).await });
-            handles.push(handle);
+        if let Some(end) = end_time {
+            let now = Instant::now();
+            if end > now {
+                sleep(end - now).await;
+            }
+            for handle in &handles {
+                handle.abort();
+            }
         }
 
         let results = join_all(handles).await;
@@ -229,6 +237,7 @@ impl StressRunner {
     }
 
     async fn worker_loop(params: WorkerParams) {
+        let req_len = params.requests.len();
         let thread_id = params.thread_id;
 
         loop {
@@ -239,65 +248,36 @@ impl StressRunner {
                 break;
             }
 
-            let mut download_handles = Vec::with_capacity(params.concurrency);
+            let idx = rng().random_range(0..req_len);
+            let req = params.requests[idx].try_clone().unwrap();
 
-            for _ in 0..params.concurrency {
-                let client = params.client.clone();
-                let targets = params.targets.clone();
-                let successful_requests = Arc::clone(&params.successful_requests);
-                let failed_requests = Arc::clone(&params.failed_requests);
-                let bytes_downloaded = Arc::clone(&params.bytes_downloaded);
+            let client = params.client.clone();
+            let successful_requests = Arc::clone(&params.successful_requests);
+            let failed_requests = Arc::clone(&params.failed_requests);
+            let bytes_downloaded = Arc::clone(&params.bytes_downloaded);
 
-                download_handles.push(tokio::spawn(Self::download_once(
-                    client,
-                    targets,
-                    successful_requests,
-                    failed_requests,
-                    bytes_downloaded,
-                )));
-            }
-
-            if let Some(end) = params.end_time {
-                let time_left = end.saturating_duration_since(Instant::now());
-                if time_left.as_millis() < 100 {
-                    let _ = join_all(download_handles).await;
-                    break;
-                }
-                let _ = tokio::time::timeout(time_left, join_all(download_handles)).await;
-            } else {
-                let _ = join_all(download_handles).await;
-            }
-
-            tokio::time::sleep(default_jitter()).await;
+            Self::execute_request(
+                client,
+                req,
+                successful_requests,
+                failed_requests,
+                bytes_downloaded,
+            )
+            .await;
         }
 
         log::debug!("Worker {thread_id} completed");
     }
 
-    async fn download_once(
+    async fn execute_request(
         client: Client,
-        targets: Vec<String>,
+        request: reqwest::Request,
         successful_requests: Arc<AtomicU64>,
         failed_requests: Arc<AtomicU64>,
         bytes_downloaded: Arc<AtomicU64>,
     ) {
-        let (target_index, ua_index) = {
-            let mut rng = rand::rng();
-            (
-                rng.random_range(0..targets.len()),
-                rng.random_range(0..USER_AGENTS.len()),
-            )
-        };
-
-        let target = &targets[target_index];
-        let user_agent = USER_AGENTS[ua_index];
-
-        match client
-            .get(target)
-            .header("User-Agent", user_agent)
-            .send()
-            .await
-        {
+        let target = request.url().to_string();
+        match client.execute(request).await {
             Ok(response) => {
                 successful_requests.fetch_add(1, Ordering::Relaxed);
 

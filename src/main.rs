@@ -79,6 +79,11 @@ async fn main() -> Result<()> {
         proxy_ports
     );
 
+    process_manager.start_monitor(Duration::from_secs(2));
+
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    log::info!("Monitor started, proceeding with stress test...");
+
     let targets = args
         .custom_targets
         .as_ref()
@@ -100,6 +105,8 @@ async fn main() -> Result<()> {
         .await;
 
     let process_manager_clone = process_manager.clone();
+    let stress_runner_clone = stress_runner.clone();
+
     tokio::spawn(async move {
         match signal::ctrl_c().await {
             Ok(()) => {
@@ -107,6 +114,7 @@ async fn main() -> Result<()> {
                     "\n{}",
                     "Received Ctrl+C, shutting down gracefully...".yellow()
                 );
+                print_stats(&stress_runner_clone);
                 if let Err(e) = process_manager_clone.terminate_all().await {
                     log::error!("Error during shutdown: {e}");
                 }
@@ -140,6 +148,44 @@ async fn main() -> Result<()> {
 
     stress_runner.run().await.context("Stress test failed")?;
 
+    print_stats(&stress_runner);
+
+    process_manager
+        .terminate_all()
+        .await
+        .context("Failed to cleanup xray processes")?;
+
+    println!(
+        "\n{} Test completed successfully!",
+        "[herscat]".red().bold()
+    );
+
+    Ok(())
+}
+
+async fn load_proxy_configs(args: &Args) -> Result<Vec<ProxyConfig>> {
+    if let Some(ref url) = args.url {
+        let cfg = parse_proxy_url(url).context("Failed to parse proxy URL")?;
+        Ok(vec![cfg])
+    } else if let Some(ref list_file) = args.list {
+        let content = fs::read_to_string(list_file)
+            .with_context(|| format!("Failed to read proxy list file: {list_file}"))?;
+        parse_proxy_list(&content).context("Failed to parse proxy list")
+    } else {
+        unreachable!("Either url or list should be provided (validated earlier)")
+    }
+}
+
+fn print_completions<G: Generator>(generator: G, cmd: &mut clap::Command) {
+    generate(
+        generator,
+        cmd,
+        cmd.get_name().to_string(),
+        &mut std::io::stdout(),
+    );
+}
+
+fn print_stats(stress_runner: &StressRunner) {
     log::debug!(
         "About to get final stats - Success: {}, Failed: {}, Bytes: {}",
         stress_runner
@@ -179,39 +225,6 @@ async fn main() -> Result<()> {
     println!(
         "  Test Duration: {}s",
         format!("{:.2}", final_stats.elapsed().as_secs_f64()).cyan()
-    );
-
-    process_manager
-        .terminate_all()
-        .await
-        .context("Failed to cleanup xray processes")?;
-
-    println!(
-        "\n{} Test completed successfully!",
-        "[herscat]".red().bold()
-    );
-    Ok(())
-}
-
-async fn load_proxy_configs(args: &Args) -> Result<Vec<ProxyConfig>> {
-    if let Some(ref url) = args.url {
-        let cfg = parse_proxy_url(url).context("Failed to parse proxy URL")?;
-        Ok(vec![cfg])
-    } else if let Some(ref list_file) = args.list {
-        let content = fs::read_to_string(list_file)
-            .with_context(|| format!("Failed to read proxy list file: {list_file}"))?;
-        parse_proxy_list(&content).context("Failed to parse proxy list")
-    } else {
-        unreachable!("Either url or list should be provided (validated earlier)")
-    }
-}
-
-fn print_completions<G: Generator>(generator: G, cmd: &mut clap::Command) {
-    generate(
-        generator,
-        cmd,
-        cmd.get_name().to_string(),
-        &mut std::io::stdout(),
     );
 }
 

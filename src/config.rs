@@ -137,12 +137,33 @@ impl ConfigGenerator {
 
         match security {
             "tls" => {
+                let (allow_insecure, server_name, fp) = if let Some(v) = vless {
+                    (
+                        v.allow_insecure,
+                        v.sni.clone().unwrap_or_else(|| v.host.clone()),
+                        v.fingerprint.clone(),
+                    )
+                } else if let Some(t) = trojan {
+                    (
+                        t.allow_insecure,
+                        t.sni.clone().unwrap_or_else(|| t.server.clone()),
+                        t.fingerprint.clone(),
+                    )
+                } else {
+                    (false, String::new(), None)
+                };
+
                 let mut tls_settings = serde_json::json!({
-                    "allowInsecure": true
+                    "allowInsecure": allow_insecure
                 });
-                if let Some(name) = sni {
-                    tls_settings["serverName"] = serde_json::Value::String(name);
+
+                if !server_name.is_empty() {
+                    tls_settings["serverName"] = serde_json::Value::String(server_name);
                 }
+                if let Some(fp) = fp {
+                    tls_settings["fingerprint"] = serde_json::Value::String(fp);
+                }
+
                 stream_settings["tlsSettings"] = tls_settings;
             }
             "reality" => {
@@ -164,6 +185,46 @@ impl ConfigGenerator {
             }
             "none" => {}
             other => return Err(anyhow::anyhow!("Unsupported security type: {}", other)),
+        }
+
+        match network {
+            "ws" => {
+                if let Some(v) = vless {
+                    let mut ws = serde_json::json!({});
+                    if let Some(p) = &v.path {
+                        ws["path"] = serde_json::Value::String(p.clone());
+                    }
+                    if let Some(h) = &v.host_header {
+                        ws["headers"] = serde_json::json!({ "Host": h });
+                    }
+                    stream_settings["wsSettings"] = ws;
+                } else if let Some(t) = trojan {
+                    let mut ws = serde_json::json!({});
+                    if let Some(p) = &t.path {
+                        ws["path"] = serde_json::Value::String(p.clone());
+                    }
+                    if let Some(h) = &t.host {
+                        ws["headers"] = serde_json::json!({ "Host": h });
+                    }
+                    stream_settings["wsSettings"] = ws;
+                }
+            }
+            "grpc" => {
+                if let Some(v) = vless {
+                    if let Some(name) = &v.service_name {
+                        stream_settings["grpcSettings"] = serde_json::json!({
+                            "serviceName": name
+                        });
+                    }
+                } else if let Some(t) = trojan
+                    && let Some(name) = &t.service_name
+                {
+                    stream_settings["grpcSettings"] = serde_json::json!({
+                        "serviceName": name
+                    });
+                }
+            }
+            _ => {}
         }
 
         Ok(stream_settings)

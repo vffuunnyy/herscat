@@ -1,14 +1,19 @@
 use crate::config::ConfigGenerator;
 use crate::parser::ProxyConfig;
 use anyhow::{Context, Result};
+use std::io::ErrorKind;
 use std::net::TcpListener;
+use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 
 #[derive(Debug)]
 pub struct XrayInstance {
     pub port: u16,
+    proxy_config: ProxyConfig,
     pub process: Child,
 }
 
@@ -31,6 +36,7 @@ impl XrayInstance {
             .arg(&config_path)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
+            .process_group(0)
             .spawn()
             .with_context(|| format!("Failed to start xray-core process for port {port}"))?;
 
@@ -56,7 +62,11 @@ impl XrayInstance {
             }
         }
 
-        Ok(XrayInstance { port, process })
+        Ok(XrayInstance {
+            port,
+            proxy_config: proxy_config.clone(),
+            process,
+        })
     }
 
     pub fn is_running(&mut self) -> bool {
@@ -67,23 +77,93 @@ impl XrayInstance {
         }
     }
 
-    pub fn terminate(&mut self) -> Result<()> {
+    pub fn restart(&mut self, config_generator: &ConfigGenerator) -> Result<()> {
         if self.is_running() {
-            log::info!(
-                "Terminating xray-core instance (PID: {}) on port {}",
+            log::warn!(
+                "Requested restart but xray-core (PID: {}) on port {} is still running",
                 self.process.id(),
                 self.port
             );
-
-            self.process
-                .kill()
-                .context("Failed to kill xray-core process")?;
-
-            self.process
-                .wait()
-                .context("Failed to wait for xray-core process termination")?;
+            return Ok(());
         }
+
+        let config_path = config_generator.generate_config(&self.proxy_config, self.port)?;
+
+        log::warn!(
+            "Restarting xray-core instance on port {} with config: {}",
+            self.port,
+            config_path.display()
+        );
+
+        let mut process = Command::new("xray")
+            .arg("-c")
+            .arg(&config_path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .with_context(|| {
+                format!("Failed to restart xray-core process for port {}", self.port)
+            })?;
+
+        match process.try_wait() {
+            Ok(Some(status)) => {
+                return Err(anyhow::anyhow!(
+                    "xray-core process exited immediately after restart with status: {}",
+                    status
+                ));
+            }
+            Ok(None) => {
+                log::info!(
+                    "xray-core restarted successfully (PID: {}) on port {}",
+                    process.id(),
+                    self.port
+                );
+            }
+            Err(e) => {
+                return Err(anyhow::anyhow!(
+                    "Failed to check xray-core process status after restart: {}",
+                    e
+                ));
+            }
+        }
+
+        self.process = process;
         Ok(())
+    }
+
+    fn terminate(&mut self) -> Result<TerminationStatus> {
+        if self.is_running() {
+            let pid = self.process.id();
+            log::info!("Stopping xray-core (PID: {}) on port {}", pid, self.port);
+
+            match self.process.kill() {
+                Ok(()) => {
+                    self.process
+                        .wait()
+                        .context("Failed to wait for xray-core process termination")?;
+                    Ok(TerminationStatus::Killed)
+                }
+                Err(e) => {
+                    if e.kind() == ErrorKind::InvalidInput || e.kind() == ErrorKind::NotFound {
+                        let _ = self.process.try_wait();
+                        log::debug!(
+                            "xray-core on port {} exited during shutdown window (race)",
+                            self.port
+                        );
+                        Ok(TerminationStatus::RaceExited)
+                    } else {
+                        Err(anyhow::anyhow!("Failed to kill xray-core process: {}", e))
+                    }
+                }
+            }
+        } else {
+            log::debug!(
+                "xray-core on port {} is not running (already exited)",
+                self.port
+            );
+            Ok(TerminationStatus::AlreadyExited)
+        }
     }
 }
 
@@ -178,18 +258,108 @@ impl ProcessManager {
         Ok(ports)
     }
 
+    pub fn start_monitor(&self, interval: Duration) {
+        let instances = Arc::clone(&self.instances);
+        let cfg = Arc::clone(&self.config_generator);
+
+        tokio::spawn(async move {
+            {
+                let mut guard = instances.lock().await;
+                let total = guard.len();
+                let mut alive = 0;
+                let mut restarted = 0;
+
+                for inst in guard.iter_mut() {
+                    if inst.is_running() {
+                        alive += 1;
+                    } else {
+                        log::warn!(
+                            "Detected crashed xray-core on port {}. Attempting restart...",
+                            inst.port
+                        );
+                        if let Err(e) = inst.restart(&cfg) {
+                            log::error!("Failed to restart xray-core on port {}: {}", inst.port, e);
+                        } else {
+                            restarted += 1;
+                            alive += 1;
+                        }
+                    }
+                }
+
+                log::debug!(
+                    "Monitor initial check: {}/{} alive, {} restarted",
+                    alive,
+                    total,
+                    restarted
+                );
+            }
+
+            loop {
+                sleep(interval).await;
+                let mut guard = instances.lock().await;
+                let total = guard.len();
+                let mut alive = 0;
+                let mut restarted = 0;
+
+                for inst in guard.iter_mut() {
+                    if inst.is_running() {
+                        alive += 1;
+                    } else {
+                        log::warn!(
+                            "Detected crashed xray-core on port {}. Attempting restart...",
+                            inst.port
+                        );
+                        if let Err(e) = inst.restart(&cfg) {
+                            log::error!("Failed to restart xray-core on port {}: {}", inst.port, e);
+                        } else {
+                            restarted += 1;
+                            alive += 1;
+                        }
+                    }
+                }
+
+                if restarted > 0 {
+                    log::info!(
+                        "Monitor check: {}/{} alive, {} restarted",
+                        alive,
+                        total,
+                        restarted
+                    );
+                } else {
+                    log::debug!(
+                        "Monitor check: {}/{} alive, {} restarted",
+                        alive,
+                        total,
+                        restarted
+                    );
+                }
+            }
+        });
+    }
+
     pub async fn terminate_all(&self) -> Result<()> {
         let mut instances = self.instances.lock().await;
 
-        log::info!("Terminating all xray-core instances");
+        log::info!("Shutting down xray-core instances...");
+
+        let mut killed = 0usize;
+        let mut already = 0usize;
+        let mut raced = 0usize;
+        let mut errors = 0usize;
 
         for instance in instances.iter_mut() {
-            if let Err(e) = instance.terminate() {
-                log::warn!(
-                    "Failed to terminate instance on port {}: {}",
-                    instance.port,
-                    e
-                );
+            match instance.terminate() {
+                Ok(TerminationStatus::Killed) => killed += 1,
+                Ok(TerminationStatus::AlreadyExited) => already += 1,
+                Ok(TerminationStatus::RaceExited) => raced += 1,
+                Err(e) => {
+                    errors += 1;
+                    log::warn!(
+                        "Failed to terminate instance on port {}: {}",
+                        instance.port,
+                        e
+                    );
+                }
             }
         }
 
@@ -197,6 +367,26 @@ impl ProcessManager {
 
         if let Err(e) = self.config_generator.cleanup_all() {
             log::warn!("Failed to cleanup config files: {e}");
+        }
+
+        let total = killed + already + raced + errors;
+        if errors > 0 {
+            log::warn!(
+                "Shutdown summary: total {}, terminated {}, already stopped {}, exited during shutdown {}, errors {}",
+                total,
+                killed,
+                already,
+                raced,
+                errors
+            );
+        } else {
+            log::info!(
+                "Shutdown summary: total {}, terminated {}, already stopped {}, exited during shutdown {}",
+                total,
+                killed,
+                already,
+                raced
+            );
         }
 
         Ok(())
@@ -211,4 +401,11 @@ impl Drop for ProcessManager {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TerminationStatus {
+    Killed,
+    AlreadyExited,
+    RaceExited,
 }

@@ -10,7 +10,7 @@ exclude = [
 ]
 
 name = "herscat"
-version = "0.1.1"
+version = "0.1.1-libr3"
 edition = "2024"
 authors = ["vffuunnyy <vffuunnyy@gmail.com>"]
 description = "High-intensity xray proxy stress tester in Rust"
