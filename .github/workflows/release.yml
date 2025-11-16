@@ -26,7 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Rust (stable)
-        uses: dtolnay/rust-toolchain@1.82.0
+        uses: dtolnay/rust-toolchain
 
       - name: Set up QEMU (for multi-arch emulation)
         if: matrix.os == 'ubuntu-latest'
