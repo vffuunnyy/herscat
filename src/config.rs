@@ -1,7 +1,7 @@
 use crate::parser::{ProxyConfig, TrojanConfig, VlessConfig};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::fs;
 use std::path::PathBuf;
 
@@ -42,12 +42,63 @@ impl ConfigGenerator {
             "listen": "127.0.0.1",
             "protocol": "socks",
             "settings": {
-                "auth": "noauth"
+                "auth": "noauth",
+                "udp": true,
+                "ip": "127.0.0.1"
             }
         });
         let outbound = match proxy_config {
             ProxyConfig::Vless(v) => {
                 let stream_settings = self.build_vless_trojan_stream_settings(Some(v), None)?;
+
+                let mut user: Map<String, Value> = Map::new();
+                user.insert("id".to_string(), serde_json::json!(v.id));
+                user.insert(
+                    "encryption".to_string(),
+                    serde_json::json!(v.encryption.clone()),
+                );
+
+                if let Some(flow) = &v.flow {
+                    if !flow.is_empty() {
+                        user.insert("flow".to_string(), serde_json::json!(flow));
+                    }
+                }
+
+                if let Some(level) = v.level {
+                    user.insert("level".to_string(), serde_json::json!(level));
+                }
+
+                if let Some(packet_encoding) = &v.packet_encoding {
+                    if !packet_encoding.is_empty() {
+                        user.insert(
+                            "packetEncoding".to_string(),
+                            serde_json::json!(packet_encoding),
+                        );
+                    }
+                }
+
+                if let Some(xor_mode) = v.xor_mode {
+                    user.insert("xorMode".to_string(), serde_json::json!(xor_mode));
+                }
+
+                if let Some(seconds) = v.seconds {
+                    user.insert("seconds".to_string(), serde_json::json!(seconds));
+                }
+
+                if let Some(padding) = &v.padding {
+                    if !padding.is_empty() {
+                        user.insert("padding".to_string(), serde_json::json!(padding));
+                    }
+                }
+
+                if let Some(tag) = &v.reverse_tag {
+                    if !tag.is_empty() {
+                        user.insert("reverse".to_string(), serde_json::json!({ "tag": tag }));
+                    }
+                }
+
+                let users = Value::Array(vec![Value::Object(user)]);
+
                 serde_json::json!({
                     "protocol": "vless",
                     "tag": "vless-out",
@@ -55,11 +106,7 @@ impl ConfigGenerator {
                         "vnext": [{
                             "address": v.host,
                             "port": v.port,
-                            "users": [{
-                                "id": v.id,
-                                "encryption": "none",
-                                "flow": v.flow.as_deref().unwrap_or("")
-                            }]
+                            "users": users
                         }]
                     },
                     "streamSettings": stream_settings
@@ -108,7 +155,7 @@ impl ConfigGenerator {
         trojan: Option<&TrojanConfig>,
     ) -> Result<Value> {
         // Determine common fields
-        let (network, security, sni, public_key, short_id, fingerprint) = if let Some(v) = vless {
+        let (network, security, _, public_key, short_id, fingerprint) = if let Some(v) = vless {
             (
                 v.network.as_str(),
                 v.security.as_str(),
@@ -168,7 +215,7 @@ impl ConfigGenerator {
             }
             "reality" => {
                 if let Some(v) = vless {
-                    let reality_settings = serde_json::json!({
+                    let mut reality_settings = serde_json::json!({
                         "serverName": v.sni.as_ref().unwrap_or(&v.host),
                         "publicKey": public_key.as_ref()
                             .ok_or_else(|| anyhow::anyhow!("Reality requires public key"))?,
@@ -176,6 +223,13 @@ impl ConfigGenerator {
                             .ok_or_else(|| anyhow::anyhow!("Reality requires short ID"))?,
                         "fingerprint": fingerprint.as_ref().unwrap_or(&"chrome".to_string())
                     });
+
+                    if let Some(spider) = &v.spider_x {
+                        if let Value::Object(obj) = &mut reality_settings {
+                            obj.insert("spiderX".to_string(), serde_json::json!(spider));
+                        }
+                    }
+
                     stream_settings["realitySettings"] = reality_settings;
                 } else {
                     return Err(anyhow::anyhow!(

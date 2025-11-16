@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends golang git binu
 #     && chmod +x /usr/local/bin/xray \
 #     && rm /tmp/xray.zip
 
-ARG XRAY_VERSION=25.8.3
+ARG XRAY_VERSION=25.10.15
 
 RUN git clone --depth 1 --branch v${XRAY_VERSION} https://github.com/XTLS/Xray-core.git /src \
     && cd /src \

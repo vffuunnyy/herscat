@@ -13,6 +13,7 @@ pub struct VlessConfig {
     pub port: u16,
     pub network: String,
     pub security: String,
+    pub encryption: String,
     pub sni: Option<String>,
     pub flow: Option<String>,
     pub public_key: Option<String>,
@@ -24,12 +25,18 @@ pub struct VlessConfig {
     pub mode: Option<String>,
     pub extra_xhttp: Option<String>,
     pub service_name: Option<String>,
+    pub packet_encoding: Option<String>,
+    pub spider_x: Option<String>,
+    pub reverse_tag: Option<String>,
     pub multi_mode: bool,
     pub idle_timeout: Option<i32>,
     pub windows_size: Option<i32>,
     pub allow_insecure: bool,
     pub alpn: Vec<String>,
     pub level: Option<i32>,
+    pub xor_mode: Option<u32>,
+    pub seconds: Option<u32>,
+    pub padding: Option<String>,
     pub raw: String,
 }
 
@@ -61,6 +68,35 @@ impl VlessConfig {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
 
+        let encryption = params
+            .get("encryption")
+            .cloned()
+            .unwrap_or_else(|| "none".to_string());
+
+        let packet_encoding = params
+            .get("packetEncoding")
+            .or_else(|| params.get("packetencoding"))
+            .cloned();
+
+        let spider_x = params.get("spiderX").or_else(|| params.get("spx")).cloned();
+
+        let reverse_tag = params
+            .get("reverse")
+            .or_else(|| params.get("reverseTag"))
+            .cloned();
+
+        let xor_mode = params
+            .get("xorMode")
+            .or_else(|| params.get("xormode"))
+            .and_then(|s| s.parse::<u32>().ok());
+
+        let seconds = params
+            .get("seconds")
+            .or_else(|| params.get("Seconds"))
+            .and_then(|s| s.parse::<u32>().ok());
+
+        let padding = params.get("padding").cloned();
+
         let mut config = VlessConfig {
             id: id.to_string(),
             host,
@@ -73,6 +109,7 @@ impl VlessConfig {
                 .get("security")
                 .cloned()
                 .unwrap_or_else(|| "none".to_string()),
+            encryption,
             sni: params.get("sni").cloned(),
             flow: params.get("flow").cloned(),
             public_key: params.get("pbk").cloned(),
@@ -84,9 +121,12 @@ impl VlessConfig {
             mode: None,
             extra_xhttp: None,
             service_name: None,
+            packet_encoding,
+            spider_x,
+            reverse_tag,
             multi_mode: params
                 .get("multiMode")
-                .map(|v| v == "true")
+                .map(|v| is_truthy(v))
                 .unwrap_or(false),
             idle_timeout: params
                 .get("idleTimeout")
@@ -94,13 +134,16 @@ impl VlessConfig {
             windows_size: params.get("windowSize").and_then(|s| s.parse::<i32>().ok()),
             allow_insecure: params
                 .get("allowInsecure")
-                .map(|v| v == "true")
+                .map(|v| is_truthy(v))
                 .unwrap_or(false),
             alpn: params
                 .get("alpn")
                 .map(|s| s.split(',').map(|x| x.to_string()).collect())
                 .unwrap_or_default(),
             level: params.get("level").and_then(|s| s.parse::<i32>().ok()),
+            xor_mode,
+            seconds,
+            padding,
             raw: vless_url.to_string(),
         };
 
@@ -137,6 +180,10 @@ impl VlessConfig {
             _ => return Err(anyhow!("Unsupported security type: {}", self.security)),
         }
 
+        if self.encryption.trim().is_empty() {
+            return Err(anyhow!("VLESS config missing encryption parameter"));
+        }
+
         match self.network.as_str() {
             "tcp" | "ws" | "grpc" | "h2" | "xhttp" | "httpupgrade" => {}
             _ => return Err(anyhow!("Unsupported network type: {}", self.network)),
@@ -149,6 +196,30 @@ impl VlessConfig {
             if self.short_id.is_none() {
                 return Err(anyhow!("Reality security requires short ID"));
             }
+        }
+
+        if let Some(mode) = self.xor_mode {
+            if mode > 2 {
+                return Err(anyhow!("xorMode must be between 0 and 2"));
+            }
+        }
+
+        if let Some(seconds) = self.seconds {
+            if seconds == 0 {
+                return Err(anyhow!("seconds must be greater than 0"));
+            }
+        }
+
+        if let Some(tag) = &self.reverse_tag {
+            if tag.trim().is_empty() {
+                return Err(anyhow!("reverse tag cannot be empty"));
+            }
+        }
+
+        if self.spider_x.is_some() && self.security != "reality" {
+            return Err(anyhow!(
+                "spiderX is only supported when security is set to reality"
+            ));
         }
 
         Ok(())
@@ -360,6 +431,16 @@ pub fn parse_proxy_list(content: &str) -> Result<Vec<ProxyConfig>> {
         return Err(anyhow!("No valid proxy configurations found"));
     }
     Ok(configs)
+}
+
+fn is_truthy(value: &str) -> bool {
+    match value.trim() {
+        "1" => true,
+        v if v.eq_ignore_ascii_case("true") => true,
+        v if v.eq_ignore_ascii_case("yes") => true,
+        v if v.eq_ignore_ascii_case("on") => true,
+        _ => false,
+    }
 }
 
 fn auto_decode(input: &str) -> Result<Vec<u8>> {

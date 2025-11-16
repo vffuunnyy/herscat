@@ -15,7 +15,7 @@ use tokio::signal;
 use cli::{Args, Commands};
 use parser::{ProxyConfig, parse_proxy_list, parse_proxy_url};
 use process::ProcessManager;
-use stressor::{StressConfig, StressRunner, get_default_targets, parse_custom_targets};
+use stressor::{StressConfig, StressRunner, resolve_targets};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -84,17 +84,19 @@ async fn main() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(3)).await;
     log::info!("Monitor started, proceeding with stress test...");
 
-    let targets = args
-        .custom_targets
-        .as_ref()
-        .map(|target| parse_custom_targets(target))
-        .unwrap_or_else(get_default_targets);
+    let targets = resolve_targets(args.mode, args.custom_targets.as_deref())
+        .context("Failed to prepare targets for selected mode")?;
 
     let stress_config = StressConfig {
+        mode: args.mode,
         targets,
         concurrency: args.concurrency,
         duration: (args.duration > 0).then(|| Duration::from_secs(args.duration)),
         proxy_ports: proxy_ports.clone(),
+        packet_size: args.packet_size as usize,
+        packet_rate: args.packet_rate,
+        packets_per_connection: (args.packets_per_connection > 0)
+            .then(|| args.packets_per_connection),
     };
 
     let stress_runner =
@@ -186,99 +188,106 @@ fn print_completions<G: Generator>(generator: G, cmd: &mut clap::Command) {
 }
 
 fn print_stats(stress_runner: &StressRunner) {
-    log::debug!(
-        "About to get final stats - Success: {}, Failed: {}, Bytes: {}",
-        stress_runner
-            .successful_requests
-            .load(std::sync::atomic::Ordering::Relaxed),
-        stress_runner
-            .failed_requests
-            .load(std::sync::atomic::Ordering::Relaxed),
-        stress_runner
-            .bytes_downloaded
-            .load(std::sync::atomic::Ordering::Relaxed)
-    );
     let final_stats = stress_runner.get_current_stats();
-    log::debug!(
-        "Final stats object - Success: {}, Failed: {}, Bytes: {}",
-        final_stats.successful_requests,
-        final_stats.failed_requests,
-        final_stats.bytes_downloaded
-    );
     println!("\n{} Final Statistics:", "[herscat]".red().bold());
     println!(
-        "  Total Traffic: {} MB",
-        format!(
-            "{:.2}",
-            final_stats.bytes_downloaded as f64 / (1024.0 * 1024.0)
-        )
-        .cyan()
-    );
-    println!(
-        "  Average Bandwidth: {} Mbps",
-        format!(
-            "{:.2}",
-            (final_stats.bytes_per_second() * 8.0) / (1000.0 * 1000.0)
-        )
-        .cyan()
+        "  Success Events: {} | Failed Events: {}",
+        final_stats.success_events.to_string().green(),
+        final_stats.failure_events.to_string().red()
     );
     println!(
         "  Test Duration: {}s",
         format!("{:.2}", final_stats.elapsed().as_secs_f64()).cyan()
     );
+
+    match stress_runner.mode() {
+        crate::cli::Mode::Download => {
+            println!(
+                "  Total Traffic: {} MB",
+                format!(
+                    "{:.2}",
+                    final_stats.bytes_transferred as f64 / (1024.0 * 1024.0)
+                )
+                .cyan()
+            );
+            println!(
+                "  Average Bandwidth: {} Mbps",
+                format!(
+                    "{:.2}",
+                    (final_stats.bytes_per_second() * 8.0) / (1000.0 * 1000.0)
+                )
+                .cyan()
+            );
+        }
+        crate::cli::Mode::TcpFlood | crate::cli::Mode::UdpFlood => {
+            println!(
+                "  Total Packets: {}",
+                final_stats.packets_sent.to_string().cyan()
+            );
+            println!(
+                "  Average PPS: {}",
+                format!("{:.0}", final_stats.packets_per_second()).cyan()
+            );
+            println!(
+                "  Estimated Throughput: {} Mbps",
+                format!(
+                    "{:.2}",
+                    (final_stats.bytes_per_second() * 8.0) / (1000.0 * 1000.0)
+                )
+                .cyan()
+            );
+        }
+    }
 }
 
 fn print_banner() {
     let art = r#"
-         ██╗  ██╗███████╗██████╗ ███████╗ ██████╗ █████╗ ████████╗
-         ██║  ██║██╔════╝██╔══██╗██╔════╝██╔════╝██╔══██╗╚══██╔══╝
-         ███████║█████╗  ██████╔╝███████╗██║     ███████║   ██║   
-         ██╔══██║██╔══╝  ██╔══██╗╚════██║██║     ██╔══██║   ██║   
-         ██║  ██║███████╗██║  ██║███████║╚██████╗██║  ██║   ██║   
-         ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝   ╚═╝   
+                                                ▁▁▁              ▁▁                              
+                                                ▅▅▄▄▁         ▁▃▄▅▅                              
+            ██░ ██ ▓█████  ██▀███    ██████     ▅▇▃▁▄▄▁▂▂▂▂▂▁▃▇▃▁▁▅    ▄████▄   ▄▄▄     ▄▄▄█████▓
+           ▓██░ ██▒▓█   ▀ ▓██ ▒ ██▒▒██    ▒     ▅▇▅▁▁▄████████▂▁▃▅▅   ▒██▀ ▀█  ▒████▄   ▓  ██▒ ▓▒
+           ▒██▀▀██░▒███   ▓██ ░▄█ ▒░ ▓██▄       ▄▄█▃▄███▇▆▇███▇▃▁▂▄   ▒▓█    ▄ ▒██  ▀█▄ ▒ ▓██░ ▒░
+           ░▓█ ░██ ▒▓█  ▄ ▒██▀▀█▄    ▒   ██▒    ▃█▇██▇▅▅▄▃ ▃▆▄▇▇▇█▂   ▒▓▓▄ ▄██▒░██▄▄▄▄██░ ▓██▓ ░ 
+           ░▓█▒░██▓░▒████▒░██▓ ▒██▒▒██████▒▒    ▆██▇▅▄▅▅▂   ▃▅▄▅▆█▆▁  ▒ ▓███▀ ░ ▓█   ▓██▒ ▒██▒ ░ 
+            ▒ ░░▒░▒░░ ▒░ ░░ ▒▓ ░▒▓░▒ ▒▓▒ ▒ ░   ▂███▇▅▃▅▄▆   ▅▅▄▄▇██▃▁ ░ ░▒ ▒  ░ ▒▒   ▓▒█░ ▒ ░░   
+            ▒ ░▒░ ░ ░ ░  ░  ░▒ ░ ▒░░ ░▒  ░ ░  ▁▂▅▇▆▅▅▄▂  ▃▅▄  ▁▄▅▆▅▂▁   ░  ▒     ▒   ▒▒ ░   ░    
+            ░  ░░ ░   ░     ░░   ░ ░  ░  ░     ▁▅█▅▃▁  ▁▁▁▅▂▁ ▁▂▃▂    ░          ░   ▒    ░      
+            ░  ░  ░   ░  ░   ░           ░  ▂▄▅████▆▄▃▃▃▄▃▂▃▄▃▃▃▅▁    ░ ░            ░  ░        
+                                          ▃▇██████▄     ▁▁▁▁   ▁▅▂    ░                          
+                                        ▂▇█████████▄            ▅▁                               
+                                      ▁▅████████████▇▃▁        ▅▆                                
+                                     ▁▇████████████████▃     ▁▅█▃                                
+                                     ▆████████▆█████▆▅█▆▁  ▁▃██▅      ▂▂▂▂▂▁                     
+                                    ▃█████████▆▅████▇▄▅█▄▁▂▆███▁   ▁▂▂     ▁▂▁                   
+                               ▁▂▂ ▁▄█████████▆██████▆▅▅▃▂▂▂▃▅▄▁▂▂▂▂▁       ▁▁▁                  
+                          ▁▂▁▂▂▁    ▄████████▇▇▄▄▅▇█▅▁         ▁▃            ▂▃▁                 
+                        ▂▂▂▂▁    ▁▃▆██████▄▁▁     ▁▁▁           ▁▁             ▁▂▁               
+                       ▂▂       ▂▇████▆▆▆▁                                       ▂▁▁▁            
+                      ▁▃       ▃████▅▁                                             ▁▂▂           
+                  ▁▂▁▁        ▂▇███▅                                                ▁▃▁          
+                 ▃▂           ▃████                                                   ▁▂         
+                 ▄            ████▄                                                    ▄▁        
+                 ▅▁ ▃         ▅████▁                                        ▁▄   ▁  ▁  ▁▅        
+                 ▁▄▄█▂   ▁▁   ▃█████▄▂▂▂▁▂▂▁                               ▂▆▅   ▄▇▄▁▁▃▇▃        
+                   ▂██▆▅▆█▆▂  ▁▃██████▇▃▁▁▁▄▃▁▁▁    ▁▁    ▁ ▁       ▁    ▁▅▇█▅▃▃▄▇▅▅███▆         
+                    ▂▇███████▇▇██▄▅▅▆▇▇▄▄▅▆▇██▅▁ ▁  ▁▁        ▂▁    ▁▄▅▄▅███████▇▂▂▇██▇          
+                      ▂▃▅███████████▅▅▅▆████████▅▄▄▅▅▂     ▁▃▆██▆▆▆▇███████▇▆▇▅▅▅▆███▅▁          
+                        ▁▅█████████████████████████████▆▅▆▇██████████████████████▆▅▃▁            
+                          ▂▄▆▇▆▅▂ ▁▃▄▅▇████▇▅██████████████▇▅██████▆▄▂▅▇███████▅▁                
+                                       ▁▃▂▁  ▁▂▄▄▄▇██████▇▄▁ ▁▃▄▄▃▁     ▁▂▃▄▃▂▁                  
+                                                  ▁▃▃▃▂▁                                        
     "#;
 
-    let paws = "paws".red().bold();
-    let up_for = "up for".red().bold();
-    let testing = "testing".red().bold();
-    let proxy = "proxy".red().bold();
-    let fun = "fun!".yellow().bold();
-    let slogan = "\"Meow-xing\" your proxy!".blue().bold();
-    let formatted = format!(
-        r#"                                   /\__/\
-                    /\___/\       /      \
-                   (  o   o  )   (  ^   ^  )
-                    \   ^   /     \  ___  /
-                     ) --- (       ) --- (
-                ____/       \     /       \____
-           ,,,''   /    /\_/\  \_/   \_/\    \ ',,,,
-         ,''      (     \ o o /        \ o o /     )  '',
-        '         |\    |  ^  |   /\   |  ^  |    /|     '
-                  | |   |  -  |  (  )  |  -  |   | |
-                  | |  /\_____/   \/   \_____/\  | |
-                 / /  (   ___  )       (  ___   ) \ \
-                ( (    \ |o o| /        \ |o o| /   ) )
-                 \ \    | ^^^ |          | ^^^ |   / /
-                  \_\   |_____|   {paws}   |_____|  /_/
-                    |   | | | |  {up_for}  | | | |  |
-                    |   |_|_|_|  {testing} |_|_|_|  |
-                   /              {proxy}            \
-                  (                 {fun}            )
-                 /                                   \
-               ,-'                                     '-,
-             ,'                                           ',
-            (           {slogan}            )
-             ',                                           ,'
-               '-,_                                   _,-'
-                   '---,,,__               __,,,---'
-                            '""'-------'""'"#
-    );
-    println!("{}", art.red().bold());
-    println!("{}", formatted.green());
+    // Печатаем кота
+    println!("{}", art.cyan());
+
+    println!("\x1b[13A\x1b[49C{}", "Meow-xing your proxy>>>".bright_green().bold());
+    println!("\x1b[56C{}", format!("v{}", env!("CARGO_PKG_VERSION")).yellow());
+    println!("\x1b[10B");
 
     println!(
         "{} {}",
-        "herscat".red().bold(),
+        "herscat".bright_red().bold(),
         "- High-intensity proxy stress tester".white()
     );
 

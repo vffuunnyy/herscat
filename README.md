@@ -16,17 +16,19 @@ High-intensity xray proxy stress tester in Rust.
 ## Features
 
 - Launch multiple xray-core instances automatically
-- Run hundreds/thousands of concurrent HTTP download streams via SOCKS5
+- Run thousands of concurrent HTTP downloads or TCP/UDP flood streams via SOCKS5
 - Generate xray-core configs from proxy links (VLESS/Trojan/SS)
 - Single URL (`--url`) or a list file (`--list`)
 - Real-time statistics and colored output
+- Understands modern VLESS options
+- Configurable packets-per-connection limits for TCP/UDP floods to churn through proxy sessions faster
 - Graceful shutdown (Ctrl+C) with clean process teardown
 - Shell completions generator (bash, zsh, fish)
 - High-performance async runtime (Tokio)
 
 ## Why HersCat?
 
-HersCat orchestrates multiple xray-core instances and distributes HTTP download traffic across them using SOCKS5 to help you evaluate performance stability, concurrency limits, and resilience of your proxy setup.
+HersCat orchestrates multiple xray-core instances and distributes HTTP download, TCP flood, and UDP flood traffic across them using SOCKS5 to help you evaluate performance stability, concurrency limits, and resilience of your proxy setup.
 
 ## Requirements
 
@@ -104,7 +106,24 @@ Notes:
 herscat --url "vless://uuid@server.com:443?type=tcp&security=tls&sni=server.com"
 
 # Multiple proxy URLs from a file (one per line)
-herscat --list proxies.txt
+herscat --list proxies.txt --mode download --targets "http://example.com/1gb.zip"
+
+# TCP flood against host:port targets via proxies
+herscat \
+  --mode tcp-flood \
+  --list proxies.txt \
+  --targets "203.0.113.10:443,example.org:80" \
+  --packet-size 512 \
+  --packet-rate 200 \
+  --packets-per-conn 1
+
+# UDP flood (same targets syntax as TCP)
+herscat \
+  --mode udp-flood \
+  --list proxies.txt \
+  --targets "198.51.100.5:53" \
+  --packet-size 128 \
+  --packets-per-conn 5
 ```
 
 ## CLI Reference
@@ -118,17 +137,25 @@ Options:
   -d, --duration <SECONDS>        Test duration in seconds (0 = infinite) [default: 0]
   -x, --instances <N>             Number of xray-core instances [default: 5]
   -p, --base-port <PORT>          Base SOCKS5 port [default: 10808]
-  -c, --concurrency <N>           Total concurrent downloads across all instances [default: 200]
-      --targets <URLS>            Comma-separated custom target URLs for downloads
+  -c, --concurrency <N>           Total concurrency per mode across all instances [default: 200]
+  -t, --targets <ITEMS>           Mode-dependent targets (HTTP URLs or host:port entries)
+  -m, --mode <MODE>               Stress mode: download|tcp-flood|udp-flood [default: download]
+  -s, --packet-size <BYTES>       Packet size for tcp/udp flood payloads [default: 1024]
+  -r, --packet-rate <PPS>         Optional per-task packets-per-second cap for tcp/udp flood
+  -P, --packets-per-conn <COUNT>  Packets per TCP/UDP connection before reconnect (0 = keep open)
   -v, --verbose                   Info logging
       --debug                     Debug logging
-      --stats-interval <SECONDS>  Statistics reporting interval [default: 5]
+  -i, --stats-interval <SECONDS>  Statistics reporting interval [default: 5]
   -h, --help                      Print help
   -V, --version                   Print version
 
 Commands:
   completions <shell>             Generate shell completions (bash|zsh|fish)
 ```
+
+`--targets` is shared across modes: supply HTTP/HTTPS URLs for `download`, and `host:port` pairs
+for `tcp-flood` or `udp-flood`. Flood modes require explicit targets, while the download mode falls
+back to the built-in list if none is provided.
 
 ## Examples
 
@@ -143,13 +170,28 @@ herscat \
   --verbose
 ```
 
-### Custom download targets
+### Custom HTTP download and flood targets
 
 ```bash
+# Download mode with custom URLs
 herscat \
+  --mode download \
   --url "vless://uuid@server.com:443?type=tcp&security=tls" \
-  --targets "http://example.com/1gb.zip,http://example.com/5gb.zip" \
-  --concurrency 100
+  --targets "http://example.com/1gb.zip,http://example.net/5gb.zip" \
+  --concurrency 200
+
+# TCP/UDP flood modes
+herscat \
+  --mode tcp-flood \
+  --list proxies.txt \
+  --targets "target1:443,target2:80" \
+  --packet-size 256 --packets-per-conn 2
+
+herscat \
+  --mode udp-flood \
+  --list proxies.txt \
+  --targets "target3:53" \
+  --packet-size 128 --packet-rate 500
 ```
 
 ### Shell completions

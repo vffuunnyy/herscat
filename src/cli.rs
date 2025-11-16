@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 
 #[derive(Subcommand, Debug, Clone)]
@@ -8,6 +8,17 @@ pub enum Commands {
         #[arg(value_enum)]
         shell: Shell,
     },
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy)]
+#[value(rename_all = "kebab-case")]
+pub enum Mode {
+    /// Download large files over HTTP(S) through proxies
+    Download,
+    /// Send continuous TCP payloads through proxies
+    TcpFlood,
+    /// Send continuous UDP payloads through proxies
+    UdpFlood,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -26,7 +37,6 @@ pub struct Args {
     #[arg(short = 'l', long, value_name = "FILE")]
     pub list: Option<String>,
 
-    // Removed threads: we use a single total concurrency value
     /// Duration to run the test in seconds (0 = infinite)
     #[arg(short = 'd', long, default_value_t = 0)]
     pub duration: u64,
@@ -44,8 +54,34 @@ pub struct Args {
     pub concurrency: usize,
 
     /// Custom target URLs for stress testing (comma-separated)
-    #[arg(long = "targets", value_name = "URLS")]
+    #[arg(short = 't', long = "targets", value_name = "URLS")]
     pub custom_targets: Option<String>,
+
+    /// Operation mode to run the stressor with
+    #[arg(short = 'm', long = "mode", value_enum, default_value_t = Mode::Download)]
+    pub mode: Mode,
+
+    /// Packet size in bytes for TCP/UDP flood modes
+    #[arg(
+        short = 's',
+        long = "packet-size",
+        value_name = "BYTES",
+        default_value_t = 1024
+    )]
+    pub packet_size: u32,
+
+    /// Packet rate in packets per second per task (TCP/UDP modes)
+    #[arg(short = 'r', long = "packet-rate", value_name = "PPS")]
+    pub packet_rate: Option<u32>,
+
+    /// Number of packets to send before reconnecting (0 = keep connection open)
+    #[arg(
+        short = 'P',
+        long = "packets-per-conn",
+        value_name = "COUNT",
+        default_value_t = 0
+    )]
+    pub packets_per_connection: u32,
 
     /// Enable verbose logging
     #[arg(short = 'v', long = "verbose", action = clap::ArgAction::SetTrue)]
@@ -56,7 +92,7 @@ pub struct Args {
     pub debug: bool,
 
     /// Statistics reporting interval in seconds
-    #[arg(long = "stats-interval", default_value_t = 5)]
+    #[arg(short = 'i', long = "stats-interval", default_value_t = 5)]
     pub stats_interval: u64,
 
     #[command(subcommand)]
@@ -81,6 +117,24 @@ impl Args {
 
         if self.concurrency == 0 {
             return Err(anyhow::anyhow!("Concurrency must be greater than 0"));
+        }
+
+        if self.packet_size == 0 {
+            return Err(anyhow::anyhow!("Packet size must be greater than 0"));
+        }
+
+        if let Some(rate) = self.packet_rate {
+            if rate == 0 {
+                return Err(anyhow::anyhow!(
+                    "Packet rate must be greater than 0 when provided"
+                ));
+            }
+        }
+
+        if matches!(self.mode, Mode::TcpFlood | Mode::UdpFlood) && self.custom_targets.is_none() {
+            return Err(anyhow::anyhow!(
+                "Flood modes require explicit --targets (comma-separated host:port entries)"
+            ));
         }
 
         Ok(())
