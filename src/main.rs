@@ -96,7 +96,7 @@ async fn main() -> Result<()> {
         packet_size: args.packet_size as usize,
         packet_rate: args.packet_rate,
         packets_per_connection: (args.packets_per_connection > 0)
-            .then(|| args.packets_per_connection),
+            .then_some(args.packets_per_connection),
     };
 
     let stress_runner =
@@ -277,8 +277,6 @@ fn print_banner() {
                                        ▁▃▂▁  ▁▂▄▄▄▇██████▇▄▁ ▁▃▄▄▃▁     ▁▂▃▄▃▂▁                  
                                                   ▁▃▃▃▂▁                                        
     "#;
-
-    // Печатаем кота
     println!("{}", art.cyan());
 
     println!("\x1b[13A\x1b[49C{}", "Meow-xing your proxy>>>".bright_green().bold());

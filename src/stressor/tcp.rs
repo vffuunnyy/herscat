@@ -121,10 +121,8 @@ async fn send_loop(stream: &mut Socks5Stream<TcpStream>, params: &TcpWorkerParam
             sleep(interval).await;
         }
 
-        if let Some(limit) = params.packets_per_connection {
-            if packets_this_connection >= limit {
-                break;
-            }
+        if let Some(limit) = params.packets_per_connection && packets_this_connection >= limit {
+            break;
         }
 
         if let Some(end) = params.end_time

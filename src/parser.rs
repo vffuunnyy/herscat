@@ -198,22 +198,16 @@ impl VlessConfig {
             }
         }
 
-        if let Some(mode) = self.xor_mode {
-            if mode > 2 {
-                return Err(anyhow!("xorMode must be between 0 and 2"));
-            }
+        if let Some(mode) = self.xor_mode && mode > 2 {
+            return Err(anyhow!("xorMode must be between 0 and 2"));
         }
 
-        if let Some(seconds) = self.seconds {
-            if seconds == 0 {
-                return Err(anyhow!("seconds must be greater than 0"));
-            }
+        if let Some(seconds) = self.seconds && seconds == 0 {
+            return Err(anyhow!("seconds must be greater than 0"));
         }
 
-        if let Some(tag) = &self.reverse_tag {
-            if tag.trim().is_empty() {
-                return Err(anyhow!("reverse tag cannot be empty"));
-            }
+        if let Some(tag) = &self.reverse_tag && tag.trim().is_empty() {
+            return Err(anyhow!("reverse tag cannot be empty"));
         }
 
         if self.spider_x.is_some() && self.security != "reality" {
@@ -383,8 +377,8 @@ impl ShadowsocksConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "protocol", content = "config")]
 pub enum ProxyConfig {
-    Vless(VlessConfig),
-    Trojan(TrojanConfig),
+    Vless(Box<VlessConfig>),
+    Trojan(Box<TrojanConfig>),
     Shadowsocks(ShadowsocksConfig),
 }
 
@@ -404,9 +398,9 @@ pub fn parse_proxy_url(proxy_url: &str) -> Result<ProxyConfig> {
         "vless" => {
             let cfg = VlessConfig::parse(proxy_url)?;
             cfg.validate()?;
-            Ok(ProxyConfig::Vless(cfg))
+            Ok(ProxyConfig::Vless(Box::new(cfg)))
         }
-        "trojan" => Ok(ProxyConfig::Trojan(TrojanConfig::parse(proxy_url)?)),
+        "trojan" => Ok(ProxyConfig::Trojan(Box::new(TrojanConfig::parse(proxy_url)?))),
         "ss" => Ok(ProxyConfig::Shadowsocks(ShadowsocksConfig::parse(
             proxy_url,
         )?)),

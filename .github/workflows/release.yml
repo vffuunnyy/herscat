@@ -88,9 +88,9 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          awk "/## \[${VERSION}\]|## ${VERSION}/,/^## \[|^## [0-9]/" CHANGELOG.md | sed '$d' > release_notes.md
-          if [ ! -s release_notes.md ]; then
-            echo "No changelog entry found for version ${VERSION}" > release_notes.md
+          awk "/## \[${VERSION}\]|## ${VERSION}/,/^## \[|^## [0-9]/" CHANGELOG.md | sed '$d' > "$RUNNER_TEMP/release_notes.md"
+          if [ ! -s "$RUNNER_TEMP/release_notes.md" ]; then
+            echo "No changelog entry found for version ${VERSION}" > "$RUNNER_TEMP/release_notes.md"
           fi
 
       - name: Run GoReleaser
@@ -99,7 +99,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes release_notes.md
+          args: release --clean --release-notes ${{ runner.temp }}/release_notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -113,9 +113,9 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          awk "/## \[${VERSION}\]|## ${VERSION}/,/^## \[|^## [0-9]/" CHANGELOG.md | sed '$d' > release_notes.md
-          if [ ! -s release_notes.md ]; then
-            echo "No changelog entry found for version ${VERSION}" > release_notes.md
+          awk "/## \[${VERSION}\]|## ${VERSION}/,/^## \[|^## [0-9]/" CHANGELOG.md | sed '$d' > "$RUNNER_TEMP/release_notes.md"
+          if [ ! -s "$RUNNER_TEMP/release_notes.md" ]; then
+            echo "No changelog entry found for version ${VERSION}" > "$RUNNER_TEMP/release_notes.md"
           fi
 
       - name: Run GoReleaser (macOS)
@@ -124,7 +124,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes release_notes.md -f .goreleaser.macos.yaml
+          args: release --clean --release-notes ${{ runner.temp }}/release_notes.md -f .goreleaser.macos.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -138,9 +138,9 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          awk "/## \[${VERSION}\]|## ${VERSION}/,/^## \[|^## [0-9]/" CHANGELOG.md | sed '$d' > release_notes.md
-          if [ ! -s release_notes.md ]; then
-            echo "No changelog entry found for version ${VERSION}" > release_notes.md
+          awk "/## \[${VERSION}\]|## ${VERSION}/,/^## \[|^## [0-9]/" CHANGELOG.md | sed '$d' > "$RUNNER_TEMP/release_notes.md"
+          if [ ! -s "$RUNNER_TEMP/release_notes.md" ]; then
+            echo "No changelog entry found for version ${VERSION}" > "$RUNNER_TEMP/release_notes.md"
           fi
 
       - name: Run GoReleaser (Windows)
@@ -149,7 +149,7 @@ jobs:
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes release_notes.md -f .goreleaser.windows.yaml
+          args: release --clean --release-notes ${{ runner.temp }}/release_notes.md -f .goreleaser.windows.yaml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

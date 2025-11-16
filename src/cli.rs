@@ -123,12 +123,10 @@ impl Args {
             return Err(anyhow::anyhow!("Packet size must be greater than 0"));
         }
 
-        if let Some(rate) = self.packet_rate {
-            if rate == 0 {
-                return Err(anyhow::anyhow!(
-                    "Packet rate must be greater than 0 when provided"
-                ));
-            }
+        if let Some(rate) = self.packet_rate && rate == 0 {
+            return Err(anyhow::anyhow!(
+                "Packet rate must be greater than 0 when provided"
+            ));
         }
 
         if matches!(self.mode, Mode::TcpFlood | Mode::UdpFlood) && self.custom_targets.is_none() {

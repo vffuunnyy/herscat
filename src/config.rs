@@ -49,6 +49,7 @@ impl ConfigGenerator {
         });
         let outbound = match proxy_config {
             ProxyConfig::Vless(v) => {
+                let v = v.as_ref();
                 let stream_settings = self.build_vless_trojan_stream_settings(Some(v), None)?;
 
                 let mut user: Map<String, Value> = Map::new();
@@ -58,23 +59,19 @@ impl ConfigGenerator {
                     serde_json::json!(v.encryption.clone()),
                 );
 
-                if let Some(flow) = &v.flow {
-                    if !flow.is_empty() {
-                        user.insert("flow".to_string(), serde_json::json!(flow));
-                    }
+                if let Some(flow) = &v.flow && !flow.is_empty() {
+                    user.insert("flow".to_string(), serde_json::json!(flow));
                 }
 
                 if let Some(level) = v.level {
                     user.insert("level".to_string(), serde_json::json!(level));
                 }
 
-                if let Some(packet_encoding) = &v.packet_encoding {
-                    if !packet_encoding.is_empty() {
-                        user.insert(
-                            "packetEncoding".to_string(),
-                            serde_json::json!(packet_encoding),
-                        );
-                    }
+                if let Some(packet_encoding) = &v.packet_encoding && !packet_encoding.is_empty() {
+                    user.insert(
+                        "packetEncoding".to_string(),
+                        serde_json::json!(packet_encoding),
+                    );
                 }
 
                 if let Some(xor_mode) = v.xor_mode {
@@ -85,16 +82,12 @@ impl ConfigGenerator {
                     user.insert("seconds".to_string(), serde_json::json!(seconds));
                 }
 
-                if let Some(padding) = &v.padding {
-                    if !padding.is_empty() {
-                        user.insert("padding".to_string(), serde_json::json!(padding));
-                    }
+                if let Some(padding) = &v.padding && !padding.is_empty() {
+                    user.insert("padding".to_string(), serde_json::json!(padding));
                 }
 
-                if let Some(tag) = &v.reverse_tag {
-                    if !tag.is_empty() {
-                        user.insert("reverse".to_string(), serde_json::json!({ "tag": tag }));
-                    }
+                if let Some(tag) = &v.reverse_tag && !tag.is_empty() {
+                    user.insert("reverse".to_string(), serde_json::json!({ "tag": tag }));
                 }
 
                 let users = Value::Array(vec![Value::Object(user)]);
@@ -113,6 +106,7 @@ impl ConfigGenerator {
                 })
             }
             ProxyConfig::Trojan(t) => {
+                let t = t.as_ref();
                 let stream_settings = self.build_vless_trojan_stream_settings(None, Some(t))?;
                 serde_json::json!({
                     "protocol": "trojan",
@@ -224,10 +218,10 @@ impl ConfigGenerator {
                         "fingerprint": fingerprint.as_ref().unwrap_or(&"chrome".to_string())
                     });
 
-                    if let Some(spider) = &v.spider_x {
-                        if let Value::Object(obj) = &mut reality_settings {
-                            obj.insert("spiderX".to_string(), serde_json::json!(spider));
-                        }
+                    if let Some(spider) = &v.spider_x
+                        && let Value::Object(obj) = &mut reality_settings
+                    {
+                        obj.insert("spiderX".to_string(), serde_json::json!(spider));
                     }
 
                     stream_settings["realitySettings"] = reality_settings;
