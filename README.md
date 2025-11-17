@@ -2,8 +2,7 @@
 
 ![Crates.io Version](https://img.shields.io/crates/v/herscat) ![GitHub Tag](https://img.shields.io/github/v/tag/vffuunnyy/herscat) ![GitHub Repo stars](https://img.shields.io/github/stars/vffuunnyy/herscat)
 
-![Build Status](https://img.shields.io/github/actions/workflow/status/vffuunnyy/herscat/release.yml) ![Crates.io Last Update](https://img.shields.io/crates/last-update/herscat)
-![Downloads](https://img.shields.io/crates/d/herscat) ![License](https://img.shields.io/crates/l/herscat)
+![Checks](https://img.shields.io/github/check-runs/vffuunnyy/herscat/main) ![Downloads](https://img.shields.io/crates/d/herscat) ![License](https://img.shields.io/crates/l/herscat)
 
 High-intensity xray proxy stress tester in Rust.
 
